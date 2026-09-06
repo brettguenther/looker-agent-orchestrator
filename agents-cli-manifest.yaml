@@ -1,0 +1,13 @@
+name: "looker-multi-agent"
+acli_version: "1.3.1"
+agent_directory: "app"
+region: "us-east1"
+base_template: "local_looker-multi-agent"
+generated_at: "2026-09-04T00:12:35.313382+00:00"
+language: "python"
+create_params:
+  deployment_target: "agent_runtime"
+  session_type: "none"
+  cicd_runner: "skip"
+  is_a2a: true
+  agent_guidance_filename: "GEMINI.md"

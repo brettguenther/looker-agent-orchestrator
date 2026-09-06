@@ -1,0 +1,19 @@
+{
+  "name": "Domain Agent 2",
+  "description": "Looker Domain Agent 2 (e.g. Web Traffic, Marketing, or Operations)",
+  "version": "1.0.0",
+  "url": "https://your-instance.cloud.looker.com/api/4.0/a2a/agents/your-agent-2-uuid",
+  "capabilities": {
+    "streaming": true
+  },
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    {
+      "id": "query_looker_data",
+      "name": "Query Looker Data",
+      "description": "Queries Looker domain 2 data",
+      "tags": ["looker", "data"]
+    }
+  ]
+}

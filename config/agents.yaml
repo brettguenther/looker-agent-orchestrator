@@ -1,0 +1,16 @@
+version: "1.0"
+orchestrator:
+  name: "looker_multi_agent_orchestrator"
+  display_name: "Looker Multi-Agent Analytics Orchestrator"
+  description: "Unified orchestrator coordinating inquiries across specialized Looker Conversational Analytics agents."
+
+sub_agents:
+  - id: "domain_agent_1"
+    name: "${LOOKER_AGENT_1_NAME:-Domain Agent 1}"
+    description: "${LOOKER_AGENT_1_DESCRIPTION:-Specialized in answering business questions about primary domain metrics.}"
+    uuid: "${LOOKER_AGENT_1_UUID}"
+    
+  - id: "domain_agent_2"
+    name: "${LOOKER_AGENT_2_NAME:-Domain Agent 2}"
+    description: "${LOOKER_AGENT_2_DESCRIPTION:-Specialized in answering business questions about secondary domain metrics.}"
+    uuid: "${LOOKER_AGENT_2_UUID}"

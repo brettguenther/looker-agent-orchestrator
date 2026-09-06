@@ -1,0 +1,7 @@
+{
+  "remote_agent_runtime_id": "None",
+  "deployment_target": "agent_runtime",
+  "is_a2a": true,
+  "agent_directory": "app",
+  "deployment_timestamp": "None"
+}

@@ -15,14 +15,14 @@ graph TD
     AR["Vertex AI Agent Runtime (Reasoning Engine)<br/>looker-multi-agent"]
     LKR_AGENT1["Looker A2A Agent<br/>Domain Agent 1 (e.g., Sales)"]
     LKR_AGENT2["Looker A2A Agent<br/>Domain Agent 2 (e.g., Web Traffic)"]
-    BQ["BigQuery Semantic Models"]
+    DWH["Data Warehouse Semantic Models"]
 
     User -->|"1. Natural language query"| GE
     GE -->|"2. Authenticates via Google IAM & injects user Looker OAuth token"| AR
     AR -->|"3. Routes domain 1 question via A2A JSON-RPC (Bearer token)"| LKR_AGENT1
     AR -->|"4. Routes domain 2 question via A2A JSON-RPC (Bearer token)"| LKR_AGENT2
-    LKR_AGENT1 -->|"5. SQL queries with row-level security"| BQ
-    LKR_AGENT2 -->|"5. SQL queries with row-level security"| BQ
+    LKR_AGENT1 -->|"5. SQL queries with row-level security"| DWH
+    LKR_AGENT2 -->|"5. SQL queries with row-level security"| DWH
     LKR_AGENT1 -->|"6. Analytical answers & metadata"| AR
     LKR_AGENT2 -->|"6. Analytical answers & metadata"| AR
     AR -->|"7. Synthesized multi-agent response"| GE
@@ -36,7 +36,7 @@ graph TD
 3. **IAM Service Dispatch**: Gemini Enterprise calls the Agent Runtime Reasoning Engine via `:streamQuery` using internal Google Cloud IAM service credentials.
 4. **Token Injection**: The user's Looker access token is injected into request and session state (`session.state` and `tool_context.state`).
 5. **A2A Invocation**: The ADK orchestrator dynamically resolves the token across candidate keys and forwards it via native A2A JSON-RPC 2.0 (`sendMessage`) with HTTP `Authorization: Bearer <token>` to the Looker A2A API endpoint.
-6. **Data Security**: Looker verifies user identity and enforces LookML access grants, user attributes, and row-level data filters before querying BigQuery.
+6. **Data Security**: Looker verifies user identity and enforces LookML access grants, user attributes, and row-level data filters before querying the data warehouse.
 
 ---
 

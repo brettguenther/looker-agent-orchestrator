@@ -77,14 +77,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     # Shared by the A2A path and the reasoning_engine adapter routes.
     app.state.runner = runner
-    app.state.agent_app_name = adk_app.name
+    task_store = InMemoryTaskStore()
     await attach_a2a_routes(
         app,
         agent=root_agent,
         runner=runner,
-        task_store=InMemoryTaskStore(),
-        rpc_path=f"/a2a/{adk_app.name}",
+        task_store=task_store,
+        rpc_path="/a2a/app",
     )
+    if adk_app.name != "app":
+        await attach_a2a_routes(
+            app,
+            agent=root_agent,
+            runner=runner,
+            task_store=task_store,
+            rpc_path=f"/a2a/{adk_app.name}",
+        )
     yield
 
 

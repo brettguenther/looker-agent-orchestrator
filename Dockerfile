@@ -27,7 +27,9 @@ RUN uv sync --frozen
 
 ARG AGENT_VERSION=0.0.0
 ENV AGENT_VERSION=${AGENT_VERSION}
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/code/.venv/bin:$PATH"
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "uv run uvicorn app.fast_api_app:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "uvicorn app.fast_api_app:app --host 0.0.0.0 --port ${PORT:-8080}"]

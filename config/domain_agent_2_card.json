@@ -4,10 +4,22 @@
   "version": "1.0.0",
   "url": "https://your-instance.cloud.looker.com/api/4.0/a2a/agents/your-agent-2-uuid",
   "capabilities": {
-    "streaming": true
+    "streaming": true,
+    "extensions": [
+      {
+        "uri": "https://a2ui.org/a2a-extension/a2ui/v0.9",
+        "description": "Ability to render A2UI v0.9",
+        "required": false,
+        "params": {
+          "supportedCatalogIds": [
+            "https://www.gstatic.com/vertexaisearch/a2ui/v0_9/gemini_enterprise_composite_catalog.json"
+          ]
+        }
+      }
+    ]
   },
   "defaultInputModes": ["text/plain"],
-  "defaultOutputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain", "application/json+a2ui"],
   "skills": [
     {
       "id": "query_looker_data",

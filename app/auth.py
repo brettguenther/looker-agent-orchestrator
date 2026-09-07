@@ -1,11 +1,31 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Authentication and token resolution for Looker and Gemini Enterprise."""
+
 import logging
 import os
+from typing import Optional
+
+import httpx
 import yaml
-from typing import Optional, Any
 from google.adk.tools import ToolContext
+
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
+
 
 def _get_token_from_looker_cli() -> Optional[str]:
     """Reads active OAuth access token from local looker-cli config if available."""
@@ -27,12 +47,37 @@ def _get_token_from_looker_cli() -> Optional[str]:
         logger.debug("Failed reading looker-cli config: %s", e)
     return None
 
+
+def _get_token_from_client_credentials() -> Optional[str]:
+    """Authenticates to Looker using client credentials if configured in environment."""
+    client_id = os.environ.get("LOOKER_CLIENT_ID")
+    client_secret = os.environ.get("LOOKER_CLIENT_SECRET")
+    base_url = settings.looker_base_url
+
+    if client_id and client_secret and base_url:
+        try:
+            resp = httpx.post(
+                f"{base_url.rstrip('/')}/api/4.0/login",
+                data={"client_id": client_id, "client_secret": client_secret},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                token = resp.json().get("access_token")
+                if token:
+                    logger.info("Successfully fetched fresh Looker access token via client credentials.")
+                    return token
+        except Exception as e:
+            logger.debug("Failed Looker client credentials authentication: %s", e)
+    return None
+
+
 def resolve_looker_token(tool_context: Optional[ToolContext] = None) -> Optional[str]:
-    """
-    Resolves the Looker Bearer token dynamically.
+    """Resolves the Looker Bearer token dynamically.
+
     1. Checks tool_context.state for 'temp:<AUTH_ID>' or '<AUTH_ID>' (injected by Gemini Enterprise).
-    2. Checks environment settings (LOOKER_A2A_TOKEN).
-    3. Falls back to local looker-cli config if in local developer mode.
+    2. Checks session.state for injected tokens.
+    3. Checks environment settings (LOOKER_A2A_TOKEN).
+    4. Falls back to local looker-cli config or client credentials for local developer testing.
     """
     auth_id = settings.looker_auth_id
     auth_id_short = auth_id.split("/")[-1] if auth_id else ""
@@ -45,24 +90,21 @@ def resolve_looker_token(tool_context: Optional[ToolContext] = None) -> Optional
         "looker-orchestrator-auth",
     ]
 
-    # Check tool_context.state
+    # 1. Check tool_context.state (primary path in Gemini Enterprise)
     if tool_context and hasattr(tool_context, "state") and isinstance(tool_context.state, dict):
-        logger.info(f"Inspecting tool_context.state keys: {list(tool_context.state.keys())}")
         for k in candidate_keys:
             if k and k in tool_context.state and tool_context.state[k]:
                 logger.info(f"Looker token resolved from tool_context.state key: {k}")
                 return str(tool_context.state[k])
-        # Fuzzy search for any key starting with temp: or containing looker
         for k, v in tool_context.state.items():
             if (k.startswith("temp:") or "looker" in k.lower()) and v and isinstance(v, str):
                 logger.info(f"Looker token dynamically resolved from tool_context.state matching key: {k}")
                 return v
 
-    # Check session state if present
+    # 2. Check session.state
     if tool_context and hasattr(tool_context, "session"):
         session = getattr(tool_context, "session", None)
         if session and hasattr(session, "state") and isinstance(session.state, dict):
-            logger.info(f"Inspecting session.state keys: {list(session.state.keys())}")
             for k in candidate_keys:
                 if k and k in session.state and session.state[k]:
                     logger.info(f"Looker token resolved from session.state key: {k}")
@@ -72,16 +114,21 @@ def resolve_looker_token(tool_context: Optional[ToolContext] = None) -> Optional
                     logger.info(f"Looker token dynamically resolved from session.state matching key: {k}")
                     return v
 
-    # Local environment override
+    # 3. Environment override
     if settings.looker_a2a_token:
         logger.info("Using LOOKER_A2A_TOKEN from environment.")
         return settings.looker_a2a_token
 
-    # Developer fallback
+    # 4. Developer local fallbacks
     cli_token = _get_token_from_looker_cli()
     if cli_token:
         logger.info("Using token from looker-cli config for local execution.")
         return cli_token
+
+    cred_token = _get_token_from_client_credentials()
+    if cred_token:
+        logger.info("Using token obtained via client credentials.")
+        return cred_token
 
     logger.warning("No Looker access token could be resolved from context or environment.")
     return None

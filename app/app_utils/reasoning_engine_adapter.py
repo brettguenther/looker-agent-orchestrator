@@ -22,13 +22,18 @@ contract. Agent Engine forwards calls to ``/api/reasoning_engine`` (sync) and
 packaged Agent Engine.
 """
 
+import base64
 import inspect
 import json
+import logging
+import uuid
 
 from fastapi import FastAPI, HTTPException, Request, encoders, responses
 from vertexai.agent_engines.templates.adk import AdkApp
 
 from app.app_utils import services
+
+logger = logging.getLogger(__name__)
 
 
 def _no_op_instrumentor_builder(project_id: str) -> None:
@@ -78,11 +83,108 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
     @app.post("/api/stream_reasoning_engine")
     async def stream_query(request: Request) -> responses.StreamingResponse:
         body = await request.json()
-        method = resolve_method(body["class_method"], streaming=True)
+        requested_method = body.get("class_method")
+        if requested_method:
+            method = resolve_method(requested_method, streaming=True)
+        else:
+            rt = get_runtime()
+            if hasattr(rt, "async_stream_query"):
+                method = getattr(rt, "async_stream_query")
+            else:
+                method = resolve_method("stream_query", streaming=True)
+
+        kwargs = (
+            body.get("input")
+            if "input" in body and isinstance(body.get("input"), dict)
+            else {k: v for k, v in body.items() if k != "class_method"}
+        )
+        if not isinstance(kwargs, dict):
+            kwargs = {}
+
+        sig = inspect.signature(method)
+        if "user_id" in sig.parameters and ("user_id" not in kwargs or not kwargs["user_id"]):
+            kwargs["user_id"] = "end_user"
+
+        session_id = kwargs.get("session_id")
+        user_id = kwargs.get("user_id", "end_user")
+        if "request_json" in kwargs:
+            try:
+                parsed_req = json.loads(kwargs["request_json"])
+                session_id = parsed_req.get("session_id") or session_id
+                user_id = parsed_req.get("user_id") or user_id
+            except Exception:
+                pass
 
         async def generator():
-            async for event in method(**(body.get("input") or {})):
-                yield json.dumps(event) + "\n"
+            emitted_a2ui: set[str] = set()
+
+            res = method(**kwargs)
+            if inspect.isasyncgen(res) or hasattr(res, "__aiter__"):
+                async for event in res:
+                    if isinstance(event, dict):
+                        content = event.get("content") or {}
+                        parts = content.get("parts") or []
+                        for p in parts:
+                            if isinstance(p, dict):
+                                inline = p.get("inlineData") or p.get("inline_data") or {}
+                                if inline.get("mimeType") in ("application/json+a2ui", "application/a2ui+json"):
+                                    emitted_a2ui.add(str(inline.get("data")))
+                    yield json.dumps(event) + "\n"
+            else:
+                for event in res:
+                    if isinstance(event, dict):
+                        content = event.get("content") or {}
+                        parts = content.get("parts") or []
+                        for p in parts:
+                            if isinstance(p, dict):
+                                inline = p.get("inlineData") or p.get("inline_data") or {}
+                                if inline.get("mimeType") in ("application/json+a2ui", "application/a2ui+json"):
+                                    emitted_a2ui.add(str(inline.get("data")))
+                    yield json.dumps(event) + "\n"
+
+            # Check if any A2UI components were captured during tool execution
+            from app.a2ui_builder import pop_a2ui_surfaces, wrap_a2ui_datapart_envelope
+            pending_surfaces = pop_a2ui_surfaces()
+            for surface_messages in pending_surfaces:
+                messages_to_emit = surface_messages if isinstance(surface_messages, list) else [surface_messages]
+                parts = []
+                for msg in messages_to_emit:
+                    msg_str = json.dumps(msg)
+                    if msg_str not in emitted_a2ui:
+                        emitted_a2ui.add(msg_str)
+                        payload = wrap_a2ui_datapart_envelope(msg)
+                        b64_data = base64.b64encode(payload.encode("utf-8")).decode("utf-8")
+                        parts.append({
+                            "inlineData": {
+                                "mimeType": "text/plain",
+                                "data": b64_data,
+                            }
+                        })
+                if parts:
+                    if requested_method == "streaming_agent_run_with_events":
+                        a2ui_event = {
+                            "events": [
+                                {
+                                    "author": "looker_orchestrator",
+                                    "content": {
+                                        "role": "model",
+                                        "parts": parts,
+                                    },
+                                    "id": str(uuid.uuid4()),
+                                    "invocation_id": "",
+                                }
+                            ],
+                            "session_id": session_id,
+                        }
+                    else:
+                        a2ui_event = {
+                            "author": "agent",
+                            "content": {
+                                "role": "model",
+                                "parts": parts,
+                            },
+                        }
+                    yield json.dumps(a2ui_event) + "\n"
 
         return responses.StreamingResponse(
             content=generator(), media_type="application/json"
@@ -91,8 +193,27 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
     @app.post("/api/reasoning_engine")
     async def query(request: Request) -> responses.JSONResponse:
         body = await request.json()
-        method = resolve_method(body["class_method"], streaming=False)
-        kwargs = body.get("input") or {}
+        requested_method = body.get("class_method")
+        if requested_method:
+            method = resolve_method(requested_method, streaming=False)
+        else:
+            rt = get_runtime()
+            method = getattr(rt, "get_session", None) or resolve_method(
+                "get_session", streaming=False
+            )
+
+        kwargs = (
+            body.get("input")
+            if "input" in body and isinstance(body.get("input"), dict)
+            else {k: v for k, v in body.items() if k != "class_method"}
+        )
+        if not isinstance(kwargs, dict):
+            kwargs = {}
+
+        sig = inspect.signature(method)
+        if "user_id" in sig.parameters and ("user_id" not in kwargs or not kwargs["user_id"]):
+            kwargs["user_id"] = "end_user"
+
         output = (
             await method(**kwargs)
             if inspect.iscoroutinefunction(method)

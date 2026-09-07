@@ -17,23 +17,38 @@ class Settings(BaseSettings):
         default="Queries the primary business domain for analytical metrics and insights.",
         alias="LOOKER_AGENT_1_DESCRIPTION",
     )
-    looker_agent_1_uuid: str = Field(
-        default="your-agent-1-uuid",
-        validation_alias=AliasChoices("LOOKER_AGENT_1_UUID", "LOOKER_SALES_AGENT_UUID"),
+    looker_agent_1_resource: str = Field(
+        default="projects/your-gcp-project-id/locations/global/dataAgents/your-sales-agent",
+        validation_alias=AliasChoices("LOOKER_AGENT_1_RESOURCE", "LOOKER_SALES_AGENT_RESOURCE"),
     )
-
     # Domain Agent 2 (e.g. Web Traffic, Marketing Channels, Inventory)
     looker_agent_2_name: str = Field(default="Domain Agent 2", alias="LOOKER_AGENT_2_NAME")
     looker_agent_2_description: str = Field(
         default="Queries the secondary business domain for analytical metrics and insights.",
         alias="LOOKER_AGENT_2_DESCRIPTION",
     )
-    looker_agent_2_uuid: str = Field(
-        default="your-agent-2-uuid",
+    looker_agent_2_resource: str = Field(
+        default="projects/your-gcp-project-id/locations/global/dataAgents/your-traffic-agent",
+        validation_alias=AliasChoices("LOOKER_AGENT_2_RESOURCE", "LOOKER_TRAFFIC_AGENT_RESOURCE"),
+    )
+    looker_agent_1_uuid: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("LOOKER_AGENT_1_UUID", "LOOKER_SALES_AGENT_UUID"),
+    )
+    looker_agent_2_uuid: Optional[str] = Field(
+        default=None,
         validation_alias=AliasChoices("LOOKER_AGENT_2_UUID", "LOOKER_TRAFFIC_AGENT_UUID"),
     )
 
     # Backward compatibility properties
+    @property
+    def looker_sales_agent_resource(self) -> str:
+        return self.looker_agent_1_resource
+
+    @property
+    def looker_traffic_agent_resource(self) -> str:
+        return self.looker_agent_2_resource
+
     @property
     def looker_sales_agent_uuid(self) -> str:
         return self.looker_agent_1_uuid
